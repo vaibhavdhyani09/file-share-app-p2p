@@ -1,19 +1,21 @@
-import threading
-import customtkinter as ctk
 import socket
+import threading
 import os
+import customtkinter as ctk
+from zeroconf import Zeroconf, ServiceInfo
 
-ctk.set_appearance_mode("system")     # dark/light mode
-ctk.set_default_color_theme("blue")   # kya pta
-
-serverhost = '0.0.0.0'
-port = 12345
-buffer = 4096
-SEPARATOR = "<SEPARATOR>"       # separator for name and size
+ctk.set_appearance_mode("system")
+ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
-app.title("Reciever")
+app.title("Receiver")
 app.geometry("600x500")
+
+port = 12345
+buffer = 4096
+SEPARATOR = "<SEPARATOR>"
+save = "received_files"
+os.makedirs(save, exist_ok=True)
 
 statuslabel = ctk.CTkLabel(app, text="Waiting for file...", font=("Arial", 16))
 statuslabel.pack(pady=20)
@@ -25,17 +27,28 @@ progress = ctk.CTkProgressBar(app, width=400)
 progress.set(0)
 progress.pack(pady=20)
 
-save = "received_files"
-os.makedirs(save, exist_ok=True)
+def register_mdns():
+    zeroconf = Zeroconf()
+    hostname = socket.gethostname()
+    ip = socket.gethostbyname(hostname)
+    service_info = ServiceInfo(
+        "_filetransfer._tcp.local.",
+        "FileReceiver._filetransfer._tcp.local.",
+        addresses=[socket.inet_aton(ip)],
+        port=port,
+        properties={},
+        server=f"{hostname}.local.",
+    )
+    zeroconf.register_service(service_info)
 
 def start_server():
     s = socket.socket()
-    s.bind((serverhost, port))
+    s.bind(('', port))
     s.listen(1)
 
     while True:
-        client_socket, address = s.accept()
-        statuslabel.configure(text=f"Connected to: {address}")
+        client_socket, addr = s.accept()
+        statuslabel.configure(text=f"Connected to {addr}")
 
         try:
             received = client_socket.recv(buffer).decode()
@@ -50,21 +63,20 @@ def start_server():
 
             with open(filepath, "wb") as f:
                 while received_size < filesize:
-                    bytes_read = client_socket.recv(buffer)
-                    if not bytes_read:
+                    chunk = client_socket.recv(buffer)
+                    if not chunk:
                         break
-                    f.write(bytes_read)
-                    received_size += len(bytes_read)
+                    f.write(chunk)
+                    received_size += len(chunk)
                     progress.set(received_size / filesize)
                     app.update_idletasks()
 
-            statuslabel.configure(text="✅ File received successfully!")
+            statuslabel.configure(text="File received successfully!")
         except Exception as e:
-            statuslabel.configure(text=f"❌ Error: {e}")
-
+            statuslabel.configure(text=f"Error: {e}")
         client_socket.close()
 
-# Start server in background
+threading.Thread(target=register_mdns, daemon=True).start()
 threading.Thread(target=start_server, daemon=True).start()
-
 app.mainloop()
+
