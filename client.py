@@ -4,6 +4,7 @@ import os
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from zeroconf import Zeroconf, ServiceBrowser, ServiceListener
+import winsound
 
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
@@ -20,6 +21,12 @@ SEPARATOR = "<SEPARATOR>"
 
 receiver_ip = None
 
+def sound(success=True):
+    if success:
+        winsound.Beep(1000,500)  # freq, duration
+    else:
+        winsound.Beep(500,500)
+
 class FileReceiverListener(ServiceListener):
     def remove_service(self, zc, type, name): pass
     def update_service(self, zc, type, name): pass
@@ -33,6 +40,7 @@ class FileReceiverListener(ServiceListener):
             ipentry.delete(0, "end")
             ipentry.insert(0, ip)
             statuslabel.configure(text=f"Found receiver: {ip}")
+            sound(True)
 
 def discover_receiver():
     zeroconf = Zeroconf()
@@ -52,6 +60,7 @@ def send():
         return
     ip = ipentry.get()
     if not ip:
+        sound(False)
         messagebox.showerror("Error", "No receiver found or IP empty.")
         return
     try:
